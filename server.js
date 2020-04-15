@@ -6,6 +6,7 @@ var webdav = false; //Can be set to true if you want to allow webdav save (node 
 var fs = require("fs-extra");
 var express = require('express');
 var formidable = require('formidable'); //form upload processing
+var PubNub = require('pubnub');
 
 const createDOMPurify = require('dompurify'); //Prevent xss
 const { JSDOM } = require('jsdom');
@@ -20,8 +21,31 @@ var app = express();
 app.use(express.static(__dirname + '/public'));
 var server = require('http').Server(app);
 server.listen(PORT);
-var io = require('socket.io')(server);
-console.log("Webserver & socketserver running on port:" + PORT);
+
+pubnub = new PubNub({
+  publishKey: 'pub-c-1be4bf40-5cf0-4daa-995c-592ef7e5b160',
+  subscribeKey: 'sub-c-e10759f2-730c-11ea-bbea-a6250b4fd944',
+  uuid: "74a4a45c-7bee-4fbc-b197-d74dfa11b7f8",
+  // ssl: true
+})
+
+pubnub.addListener({
+  message: function(message) {
+    handleMessageEvents(message);
+  }
+})
+
+function publish(payload) {
+  pubnub.publish({
+     channel: whiteboardId,
+     message: payload
+   },
+   (status, response) => {
+     if(status.statusCode !== 200) {
+       console.error('error publishing whiteboard events')
+     }
+   });
+}
 
 if (process.env.accesstoken) {
     accessToken = process.env.accesstoken;
@@ -192,61 +216,79 @@ function saveImageToWebdav(imagepath, filename, webdavaccess, callback) {
 }
 
 var smallestScreenResolutions = {};
-io.on('connection', function (socket) {
-    var whiteboardId = null;
 
-    socket.on('disconnect', function () {
+function handleMessageEvents(obj) {
+    var whiteboardId = null
+
+    if (!obj || !obj.message) return;
+    obj = obj.message
+
+    let content;
+
+    Object.keys(obj).forEach(action => {
+      content = obj[action];
+
+      switch(action) {
+        case 'disconnect':
         if (smallestScreenResolutions && smallestScreenResolutions[whiteboardId] && socket && socket.id) {
             delete smallestScreenResolutions[whiteboardId][socket.id];
         }
-        socket.broadcast.emit('refreshUserBadges', null); //Removes old user Badges
+        publish({'refreshUserBadges': null}); //Removes old user Badges
         sendSmallestScreenResolution();
-    });
+        break;
 
-    socket.on('drawToWhiteboard', function (content) {
+        case 'drawToWhiteboard':
         content = escapeAllContentStrings(content);
         if (accessToken === "" || accessToken == content["at"]) {
-            socket.broadcast.to(whiteboardId).emit('drawToWhiteboard', content); //Send to all users in the room (not own socket)
+            publish({'drawToWhiteboard': content}); //Send to all users in the room (not own socket)
             s_whiteboard.handleEventsAndData(content); //save whiteboardchanges on the server
         } else {
-            socket.emit('wrongAccessToken', true);
+            publish({'wrongAccessToken': true});
         }
-    });
+        break;
 
-    socket.on('joinWhiteboard', function (content) {
+        case 'joinWhiteboard':
         content = escapeAllContentStrings(content);
         if (accessToken === "" || accessToken == content["at"]) {
             whiteboardId = content["wid"];
-            socket.join(whiteboardId); //Joins room name=wid
+
+            pubnub.subscribe({
+              channels: [whiteboardId],
+              withPresence: false,
+            });
+
             smallestScreenResolutions[whiteboardId] = smallestScreenResolutions[whiteboardId] ? smallestScreenResolutions[whiteboardId] : {};
-            smallestScreenResolutions[whiteboardId][socket.id] = content["windowWidthHeight"] || { w: 10000, h: 10000 };
+            // smallestScreenResolutions[whiteboardId][socket.id] = content["windowWidthHeight"] || { w: 10000, h: 10000 };
             sendSmallestScreenResolution();
         } else {
-            socket.emit('wrongAccessToken', true);
+            publish({'wrongAccessToken': true});
         }
-    });
+        break;
 
-    socket.on('updateScreenResolution', function (content) {
+        case 'updateScreenResolution':
         content = escapeAllContentStrings(content);
         if (accessToken === "" || accessToken == content["at"]) {
             smallestScreenResolutions[whiteboardId][socket.id] = content["windowWidthHeight"] || { w: 10000, h: 10000 };
             sendSmallestScreenResolution();
         }
-    });
+        break;
+      }
+    })
+  };
 
-    function sendSmallestScreenResolution() {
-        if (disableSmallestScreen) {
-            return;
-        }
-        var smallestWidth = 10000;
-        var smallestHeight = 10000;
-        for (var i in smallestScreenResolutions[whiteboardId]) {
-            smallestWidth = smallestWidth > smallestScreenResolutions[whiteboardId][i]["w"] ? smallestScreenResolutions[whiteboardId][i]["w"] : smallestWidth;
-            smallestHeight = smallestHeight > smallestScreenResolutions[whiteboardId][i]["h"] ? smallestScreenResolutions[whiteboardId][i]["h"] : smallestHeight;
-        }
-        io.to(whiteboardId).emit('updateSmallestScreenResolution', { w: smallestWidth, h: smallestHeight });
-    }
-});
+  function sendSmallestScreenResolution() {
+      if (disableSmallestScreen) {
+          return;
+      }
+      var smallestWidth = 10000;
+      var smallestHeight = 10000;
+      for (var i in smallestScreenResolutions[whiteboardId]) {
+          smallestWidth = smallestWidth > smallestScreenResolutions[whiteboardId][i]["w"] ? smallestScreenResolutions[whiteboardId][i]["w"] : smallestWidth;
+          smallestHeight = smallestHeight > smallestScreenResolutions[whiteboardId][i]["h"] ? smallestScreenResolutions[whiteboardId][i]["h"] : smallestHeight;
+      }
+      publish({ 'updateSmallestScreenResolution': { w: smallestWidth, h: smallestHeight } })
+  }
+
 
 //Prevent cross site scripting (xss)
 function escapeAllContentStrings(content, cnt) {

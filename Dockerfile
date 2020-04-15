@@ -1,6 +1,6 @@
 FROM node:11
 
-MAINTAINER cracker0dks
+MAINTAINER ruptive
 
 # Create app directory
 RUN mkdir -p /opt/app

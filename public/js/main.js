@@ -20,47 +20,86 @@ var subdir = "";
 for (var i = 3; i < urlSplit.length; i++) {
     subdir = subdir + '/' + urlSplit[i];
 }
-if (subdir != "") {
-    signaling_socket = io("", { "path": subdir + "/socket.io" }); //Connect even if we are in a subdir behind a reverse proxy
-} else {
-    signaling_socket = io();
+
+pubnub = new PubNub({
+  publishKey: 'pub-c-1be4bf40-5cf0-4daa-995c-592ef7e5b160',
+  subscribeKey: 'sub-c-e10759f2-730c-11ea-bbea-a6250b4fd944',
+  uuid: "74a4a45c-7bee-4fbc-b197-d74dfa11b7f8",
+  // ssl: true
+})
+
+pubnub.subscribe({
+  channels: [whiteboardId],
+  withPresence: false,
+});
+
+pubnub.addListener({
+  message: function(message) {
+    handleMessageEvents(message);
+  }
+})
+
+function publish(payload) {
+  pubnub.publish({
+     channel: whiteboardId,
+     message: payload
+   },
+   (status, response) => {
+     if(status.statusCode !== 200) {
+       console.error('error publishing whiteboard events')
+     }
+   });
 }
 
-signaling_socket.on('connect', function () {
-    console.log("Websocket connected!");
+function handleMessageEvents(obj) {
+    if (!obj || !obj.message) return;
+    obj = obj.message
 
-    signaling_socket.on('drawToWhiteboard', function (content) {
-        whiteboard.handleEventsAndData(content, true);
-    });
+    let data;
 
-    signaling_socket.on('refreshUserBadges', function () {
+    Object.keys(obj).forEach(action => {
+      data = obj[action];
+
+      switch(action) {
+        case 'drawToWhiteboard':
+        whiteboard.handleEventsAndData(data, true);
+        break;
+
+        case 'refreshUserBadges':
         whiteboard.refreshUserBadges();
-    });
+        break;
 
-    signaling_socket.on('wrongAccessToken', function () {
+        case 'wrongAccessToken':
         if (!accessDenied) {
-            accessDenied = true;
-            showBasicAlert("Access denied! Wrong accessToken!")
+          accessDenied = true;
+          showBasicAlert("Access denied! Wrong accessToken!")
         }
-    });
+        break;
 
-    signaling_socket.on('updateSmallestScreenResolution', function (widthHeight) {
-        whiteboard.updateSmallestScreenResolution(widthHeight["w"], widthHeight["h"]);
-    });
-
-    signaling_socket.emit('joinWhiteboard', { wid: whiteboardId, at: accessToken, windowWidthHeight: { w: $(window).width(), h: $(window).height() } });
-});
+        case 'updateSmallestScreenResolution':
+        whiteboard.updateSmallestScreenResolution(data["w"], data["h"]);
+        break;
+      }
+    })
+  };
 
 $(document).ready(function () {
     if (getQueryVariable("webdav") == "true") {
         $("#uploadWebDavBtn").show();
     }
+
+    publish({
+      "joinWhiteboard": { wid: whiteboardId, at: accessToken, windowWidthHeight: { w: $(window).width(), h: $(window).height() }}
+    })
+
     whiteboard.loadWhiteboard("#whiteboardContainer", { //Load the whiteboard
         whiteboardId: whiteboardId,
         username: btoa(myUsername),
         sendFunction: function (content) {
             content["at"] = accessToken;
-            signaling_socket.emit('drawToWhiteboard', content);
+            publish({
+              "drawToWhiteboard": content
+            })
         }
     });
 
@@ -70,7 +109,9 @@ $(document).ready(function () {
     });
 
     $(window).resize(function () {
-        signaling_socket.emit('updateScreenResolution', { at: accessToken, windowWidthHeight: { w: $(window).width(), h: $(window).height() } });
+        publish({
+          'updateScreenResolution': { at: accessToken, windowWidthHeight: { w: $(window).width(), h: $(window).height() } }
+        });
     })
 
     /*----------------/

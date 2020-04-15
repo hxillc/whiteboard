@@ -217,13 +217,13 @@ $(document).ready(function () {
     }
 
     //Load keybindings from keybinds.js to given functions
-    for (var i in keybinds) {
-        if (shortcutFunctions[keybinds[i]]) {
-            keymage(i, shortcutFunctions[keybinds[i]], { preventDefault: true });
-        } else {
-            console.error("function you want to keybind on key:", i, "named:", keybinds[i], "is not available!")
-        }
-    }
+    // for (var i in keybinds) {
+    //     if (shortcutFunctions[keybinds[i]]) {
+    //         keymage(i, shortcutFunctions[keybinds[i]], { preventDefault: true });
+    //     } else {
+    //         console.error("function you want to keybind on key:", i, "named:", keybinds[i], "is not available!")
+    //     }
+    // }
 
     // whiteboard clear button
     $("#whiteboardTrashBtn").click(function () {

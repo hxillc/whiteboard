@@ -84,9 +84,10 @@ function handleMessageEvents(obj) {
   };
 
 $(document).ready(function () {
-    if (getQueryVariable("webdav") == "true") {
-        $("#uploadWebDavBtn").show();
-    }
+  // DELETE THIS
+    // if (getQueryVariable("webdav") == "true") {
+    //     $("#uploadWebDavBtn").show();
+    // }
 
     publish({
       "joinWhiteboard": { wid: whiteboardId, at: accessToken, windowWidthHeight: { w: $(window).width(), h: $(window).height() }}
@@ -306,6 +307,11 @@ $(document).ready(function () {
         showBasicAlert("Please drag the image into the browser.");
     });
 
+
+    $("#saveWhiteboardBtn").click(function() {
+      saveWhiteboardToWebdav()
+    })
+
     // save image as png
     $("#saveAsImageBtn").click(function () {
         var imgData = whiteboard.getImageDataBase64();
@@ -338,79 +344,80 @@ $(document).ready(function () {
         }, 0);
     });
 
-    $("#uploadWebDavBtn").click(function () {
-        if ($(".webdavUploadBtn").length > 0) {
-            return;
-        }
-
-        var webdavserver = localStorage.getItem('webdavserver') || ""
-        var webdavpath = localStorage.getItem('webdavpath') || "/"
-        var webdavusername = localStorage.getItem('webdavusername') || ""
-        var webdavpassword = localStorage.getItem('webdavpassword') || ""
-        var webDavHtml = $('<div>' +
-            '<table>' +
-            '<tr>' +
-            '<td>Server URL:</td>' +
-            '<td><input class="webdavserver" type="text" value="' + webdavserver + '" placeholder="https://yourserver.com/remote.php/webdav/"></td>' +
-            '<td></td>' +
-            '</tr>' +
-            '<tr>' +
-            '<td>Path:</td>' +
-            '<td><input class="webdavpath" type="text" placeholder="folder" value="' + webdavpath + '"></td>' +
-            '<td style="font-size: 0.7em;"><i>path always have to start & end with "/"</i></td>' +
-            '</tr>' +
-            '<tr>' +
-            '<td>Username:</td>' +
-            '<td><input class="webdavusername" type="text" value="' + webdavusername + '" placeholder="username"></td>' +
-            '<td style="font-size: 0.7em;"></td>' +
-            '</tr>' +
-            '<tr>' +
-            '<td>Password:</td>' +
-            '<td><input class="webdavpassword" type="password" value="' + webdavpassword + '" placeholder="password"></td>' +
-            '<td style="font-size: 0.7em;"></td>' +
-            '</tr>' +
-            '<tr>' +
-            '<td style="font-size: 0.7em;" colspan="3">Note: You have to generate and use app credentials if you have 2 Factor Auth activated on your dav/nextcloud server!</td>' +
-            '</tr>' +
-            '<tr>' +
-            '<td></td>' +
-            '<td colspan="2"><span class="loadingWebdavText" style="display:none;">Saving to webdav, please wait...</span><button class="modalBtn webdavUploadBtn"><i class="fas fa-upload"></i> Start Upload</button></td>' +
-            '</tr>' +
-            '</table>' +
-            '</div>');
-        webDavHtml.find(".webdavUploadBtn").click(function () {
-            var webdavserver = webDavHtml.find(".webdavserver").val();
-            localStorage.setItem('webdavserver', webdavserver);
-            var webdavpath = webDavHtml.find(".webdavpath").val();
-            localStorage.setItem('webdavpath', webdavpath);
-            var webdavusername = webDavHtml.find(".webdavusername").val();
-            localStorage.setItem('webdavusername', webdavusername);
-            var webdavpassword = webDavHtml.find(".webdavpassword").val();
-            localStorage.setItem('webdavpassword', webdavpassword);
-            var base64data = whiteboard.getImageDataBase64();
-            var webdavaccess = {
-                webdavserver: webdavserver,
-                webdavpath: webdavpath,
-                webdavusername: webdavusername,
-                webdavpassword: webdavpassword
-            }
-            webDavHtml.find(".loadingWebdavText").show();
-            webDavHtml.find(".webdavUploadBtn").hide();
-            saveWhiteboardToWebdav(base64data, webdavaccess, function (err) {
-                if (err) {
-                    webDavHtml.find(".loadingWebdavText").hide();
-                    webDavHtml.find(".webdavUploadBtn").show();
-                } else {
-                    webDavHtml.parents(".basicalert").remove();
-                }
-            });
-        })
-        showBasicAlert(webDavHtml, {
-            header: "Save to Webdav",
-            okBtnText: "cancel",
-            headercolor: "#0082c9"
-        })
-    });
+    // DELETE THIS
+    // $("#uploadWebDavBtn").click(function () {
+    //     if ($(".webdavUploadBtn").length > 0) {
+    //         return;
+    //     }
+    //
+    //     var webdavserver = localStorage.getItem('webdavserver') || ""
+    //     var webdavpath = localStorage.getItem('webdavpath') || "/"
+    //     var webdavusername = localStorage.getItem('webdavusername') || ""
+    //     var webdavpassword = localStorage.getItem('webdavpassword') || ""
+    //     var webDavHtml = $('<div>' +
+    //         '<table>' +
+    //         '<tr>' +
+    //         '<td>Server URL:</td>' +
+    //         '<td><input class="webdavserver" type="text" value="' + webdavserver + '" placeholder="https://yourserver.com/remote.php/webdav/"></td>' +
+    //         '<td></td>' +
+    //         '</tr>' +
+    //         '<tr>' +
+    //         '<td>Path:</td>' +
+    //         '<td><input class="webdavpath" type="text" placeholder="folder" value="' + webdavpath + '"></td>' +
+    //         '<td style="font-size: 0.7em;"><i>path always have to start & end with "/"</i></td>' +
+    //         '</tr>' +
+    //         '<tr>' +
+    //         '<td>Username:</td>' +
+    //         '<td><input class="webdavusername" type="text" value="' + webdavusername + '" placeholder="username"></td>' +
+    //         '<td style="font-size: 0.7em;"></td>' +
+    //         '</tr>' +
+    //         '<tr>' +
+    //         '<td>Password:</td>' +
+    //         '<td><input class="webdavpassword" type="password" value="' + webdavpassword + '" placeholder="password"></td>' +
+    //         '<td style="font-size: 0.7em;"></td>' +
+    //         '</tr>' +
+    //         '<tr>' +
+    //         '<td style="font-size: 0.7em;" colspan="3">Note: You have to generate and use app credentials if you have 2 Factor Auth activated on your dav/nextcloud server!</td>' +
+    //         '</tr>' +
+    //         '<tr>' +
+    //         '<td></td>' +
+    //         '<td colspan="2"><span class="loadingWebdavText" style="display:none;">Saving to webdav, please wait...</span><button class="modalBtn webdavUploadBtn"><i class="fas fa-upload"></i> Start Upload</button></td>' +
+    //         '</tr>' +
+    //         '</table>' +
+    //         '</div>');
+    //     webDavHtml.find(".webdavUploadBtn").click(function () {
+    //         var webdavserver = webDavHtml.find(".webdavserver").val();
+    //         localStorage.setItem('webdavserver', webdavserver);
+    //         var webdavpath = webDavHtml.find(".webdavpath").val();
+    //         localStorage.setItem('webdavpath', webdavpath);
+    //         var webdavusername = webDavHtml.find(".webdavusername").val();
+    //         localStorage.setItem('webdavusername', webdavusername);
+    //         var webdavpassword = webDavHtml.find(".webdavpassword").val();
+    //         localStorage.setItem('webdavpassword', webdavpassword);
+    //         var base64data = whiteboard.getImageDataBase64();
+    //         var webdavaccess = {
+    //             webdavserver: webdavserver,
+    //             webdavpath: webdavpath,
+    //             webdavusername: webdavusername,
+    //             webdavpassword: webdavpassword
+    //         }
+    //         webDavHtml.find(".loadingWebdavText").show();
+    //         webDavHtml.find(".webdavUploadBtn").hide();
+    //         saveWhiteboardToWebdav(base64data, webdavaccess, function (err) {
+    //             if (err) {
+    //                 webDavHtml.find(".loadingWebdavText").hide();
+    //                 webDavHtml.find(".webdavUploadBtn").show();
+    //             } else {
+    //                 webDavHtml.parents(".basicalert").remove();
+    //             }
+    //         });
+    //     })
+    //     showBasicAlert(webDavHtml, {
+    //         header: "Save to Webdav",
+    //         okBtnText: "cancel",
+    //         headercolor: "#0082c9"
+    //     })
+    // });
 
     // upload json containing steps
     $("#uploadJsonBtn").click(function () {
@@ -577,32 +584,31 @@ function uploadImgAndAddToWhiteboard(base64data) {
     });
 }
 
-function saveWhiteboardToWebdav(base64data, webdavaccess, callback) {
+function saveWhiteboardToWebdav() {
     var date = (+new Date());
     $.ajax({
         type: 'POST',
         url: document.URL.substr(0, document.URL.lastIndexOf('/')) + '/upload',
         data: {
-            'imagedata': base64data,
+            'imagedata': whiteboard.getImageDataBase64(),
+            'imagejson': whiteboard.getImageDataJson(),
             'whiteboardId': whiteboardId,
             'date': date,
-            'at': accessToken,
-            'webdavaccess': JSON.stringify(webdavaccess)
+            'at': accessToken
         },
         success: function (msg) {
-            showBasicAlert("Whiteboard was saved to Webdav!", {
-                headercolor: "#5c9e5c"
-            });
-            console.log("Image uploaded for webdav!");
-            callback();
+          console.log('saved')
+            // showBasicAlert("Whiteboard Saved!", {
+            //     headercolor: "#5c9e5c"
+            // });
         },
         error: function (err) {
-            if (err.status == 403) {
-                showBasicAlert("Could not connect to Webdav folder! Please check the credentials and paths and try again!");
-            } else {
-                showBasicAlert("Unknown Webdav error! ", err);
-            }
-            callback(err);
+          console.log('error saving')
+            // if (err.status == 403) {
+            //     showBasicAlert("Could not connect to Webdav folder! Please check the credentials and paths and try again!");
+            // } else {
+            //     showBasicAlert("Unknown Webdav error! ", err);
+            // }
         }
     });
 }

@@ -4,6 +4,7 @@ var disableSmallestScreen = false; //Can be set to true if you dont want to show
 var webdav = false; //Can be set to true if you want to allow webdav save (node server.js --webdav=true)
 
 var fs = require("fs-extra");
+var fsp = require("fs-extra-promise");
 var express = require('express');
 var formidable = require('formidable'); //form upload processing
 var PubNub = require('pubnub');
@@ -22,7 +23,22 @@ app.use(express.static(__dirname + '/public'));
 var server = require('http').Server(app);
 server.listen(PORT);
 
-pubnub = new PubNub({
+var webdavaccess = {
+  webdavserver: 'https://cloud.ruptive.cx/remote.php/dav/files/whiteboard/',
+  webdavpath: '/whiteboards/',
+  webdavusername: 'whiteboard',
+  webdavpassword: 'whiteboard'
+}
+
+var client = createClient(
+  webdavaccess.webdavserver,
+  {
+    username: webdavaccess.webdavusername,
+    password: webdavaccess.webdavpassword
+  }
+)
+
+var pubnub = new PubNub({
   publishKey: 'pub-c-1be4bf40-5cf0-4daa-995c-592ef7e5b160',
   subscribeKey: 'sub-c-e10759f2-730c-11ea-bbea-a6250b4fd944',
   uuid: "74a4a45c-7bee-4fbc-b197-d74dfa11b7f8",
@@ -69,27 +85,53 @@ if (startArgs["webdav"]) {
 }
 
 if (accessToken !== "") {
-    console.log("AccessToken set to: " + accessToken);
+    // console.log("AccessToken set to: " + accessToken);
 }
 if (disableSmallestScreen) {
     console.log("Disabled showing smallest screen resolution!");
 }
 if (webdav) {
-    console.log("Webdav save is enabled!");
+    // console.log("Webdav save is enabled!");
 }
 
+// app.get('/loadwhiteboard', function (req, res) {
+//     var wid = req["query"]["wid"];
+//     var at = req["query"]["at"]; //accesstoken
+//     if (accessToken === "" || accessToken == at) {
+//         var ret = s_whiteboard.loadStoredData(wid);
+//         res.send(ret);
+//         res.end();
+//     } else {
+//         res.status(401);  //Unauthorized
+//         res.end();
+//     }
+// });
+
 app.get('/loadwhiteboard', function (req, res) {
-    var wid = req["query"]["wid"];
-    var at = req["query"]["at"]; //accesstoken
-    if (accessToken === "" || accessToken == at) {
-        var ret = s_whiteboard.loadStoredData(wid);
-        res.send(ret);
-        res.end();
-    } else {
-        res.status(401);  //Unauthorized
-        res.end();
-    }
-});
+  var whiteboardId = req["query"]["wid"];
+  var at = req["query"]["at"]
+
+  if(accessToken === "" || accessToken == at) {
+    client.getFileContents(`${webdavaccess.webdavpath}${whiteboardId}.json`, { format: "text" })
+    .then(data => {
+      if(data) {
+        data = JSON.parse(data)
+      }
+      else {
+        data = []
+      }
+      res.status(200).send(data)
+    })
+    .catch(err => {
+      console.log(err.response)
+
+      res.status(404).send(err)
+    })
+  }
+  else {
+    res.sendStatus(500)
+  }
+})
 
 app.post('/upload', function (req, res) { //File upload
     var form = new formidable.IncomingForm(); //Receive form
@@ -112,18 +154,13 @@ app.post('/upload', function (req, res) { //File upload
 
     form.on('end', function () {
         if (accessToken === "" || accessToken == formData["fields"]["at"]) {
-            progressUploadFormData(formData, function (err) {
-                if (err) {
-                    if (err == "403") {
-                        res.status(403);
-                    } else {
-                        res.status(500);
-                    }
-                    res.end();
-                } else {
-                    res.send("done");
-                }
-            });
+          progressUploadFormData(formData)
+          .then(() => {
+            res.send('done')
+          })
+          .catch(err => {
+            err == '403' ? res.sendStatus(403) : res.sendStatus(500)
+          })
         } else {
             res.status(401);  //Unauthorized
             res.end();
@@ -133,7 +170,8 @@ app.post('/upload', function (req, res) { //File upload
     form.parse(req);
 });
 
-function progressUploadFormData(formData, callback) {
+function progressUploadFormData(formData) {
+  return new Promise((resolve, reject) => {
     console.log("Progress new Form Data");
     var fields = escapeAllContentStrings(formData.fields);
     var files = formData.files;
@@ -141,78 +179,49 @@ function progressUploadFormData(formData, callback) {
 
     var name = fields["name"] || "";
     var date = fields["date"] || (+new Date());
-    var filename = whiteboardId + "_" + date + ".png";
-    var webdavaccess = fields["webdavaccess"] || false;
-    try {
-        webdavaccess = JSON.parse(webdavaccess);
-    } catch (e) {
-        webdavaccess = false;
-    }
+    var imagefile = `${whiteboardId}.png`;
+    var jsonfile  = `${whiteboardId}.json`;
+
     fs.ensureDir("./public/uploads", function (err) {
         if (err) {
             console.log("Could not create upload folder!", err);
             return;
         }
         var imagedata = fields["imagedata"];
-        if (imagedata && imagedata != "") { //Save from base64 data
+        var imagejson = fields["imagejson"];
+        var imagepath = './public/uploads';
+
+        if ((imagedata && imagedata != "") && imagejson) { //Save from base64 data
             imagedata = imagedata.replace(/^data:image\/png;base64,/, "").replace(/^data:image\/jpeg;base64,/, "");
-            console.log(filename, "uploaded");
-            fs.writeFile('./public/uploads/' + filename, imagedata, 'base64', function (err) {
-                if (err) {
-                    console.log("error", err);
-                    callback(err);
-                } else {
-                    if (webdavaccess) { //Save image to webdav
-                        if (webdav) {
-                            saveImageToWebdav('./public/uploads/' + filename, filename, webdavaccess, function (err) {
-                                if (err) {
-                                    console.log("error", err);
-                                    callback(err);
-                                } else {
-                                    callback();
-                                }
-                            })
-                        } else {
-                            callback("Webdav is not enabled on the server!");
-                        }
-                    } else {
-                        callback();
-                    }
-                }
-            });
+
+            Promise.all([
+              fsp.writeFile(`${imagepath}/${imagefile}`, imagedata, 'base64'),
+              fsp.writeFile(`${imagepath}/${jsonfile}`,  JSON.stringify(imagejson, null, 2))
+            ])
+            .then(() => {
+              if (webdavaccess) {
+                fs.createReadStream(`${imagepath}/${imagefile}`)
+                  .pipe(client.createWriteStream(`${webdavaccess.webdavpath}${imagefile}`));
+
+                fs.createReadStream(`${imagepath}/${jsonfile}`)
+                  .pipe(client.createWriteStream(`${webdavaccess.webdavpath}${jsonfile}`));
+
+                resolve()
+              }
+              else {
+                reject("Webdav is not enabled on the server!");
+              }
+            })
+            .catch(err => {
+              console.log("error", err);
+              reject(err);
+            })
         } else {
-            callback("no imagedata!");
+            reject("no imagedata!");
             console.log("No image Data found for this upload!", name);
         }
     });
-}
-
-function saveImageToWebdav(imagepath, filename, webdavaccess, callback) {
-    if (webdavaccess) {
-        var webdavserver = webdavaccess["webdavserver"] || "";
-        var webdavpath = webdavaccess["webdavpath"] || "/";
-        var webdavusername = webdavaccess["webdavusername"] || "";
-        var webdavpassword = webdavaccess["webdavpassword"] || "";
-
-        const client = createClient(
-            webdavserver,
-            {
-                username: webdavusername,
-                password: webdavpassword
-            }
-        )
-        client.getDirectoryContents(webdavpath).then((items) => {
-            var cloudpath = webdavpath+ '' + filename;
-            console.log("webdav saving to:", cloudpath);
-            fs.createReadStream(imagepath).pipe(client.createWriteStream(cloudpath));
-            callback();
-        }).catch((error) => {
-            callback("403");
-            console.log("Could not connect to webdav!")
-        });
-    } else {
-        callback("Error: no access data!")
-    }
+  })
 }
 
 var smallestScreenResolutions = {};

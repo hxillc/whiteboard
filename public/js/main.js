@@ -563,7 +563,7 @@ window.addEventListener("drop", function (e) {
 }, false);
 
 function uploadImgAndAddToWhiteboard(base64data) {
-    var date = (+new Date());
+    var date = Date.now();
     $.ajax({
         type: 'POST',
         url: document.URL.substr(0, document.URL.lastIndexOf('/')) + '/upload',
@@ -571,11 +571,15 @@ function uploadImgAndAddToWhiteboard(base64data) {
             'imagedata': base64data,
             'whiteboardId': whiteboardId,
             'date': date,
+            'name': date,
             'at': accessToken
         },
         success: function (msg) {
             var filename = whiteboardId + "_" + date + ".png";
-            whiteboard.addImgToCanvasByUrl(document.URL.substr(0, document.URL.lastIndexOf('/')) + "/uploads/" + filename); //Add image to canvas
+
+            let url = `https://cloud.ruptive.cx/index.php/s/8SPTq6ZAibw8E8g/download?path=%2F${whiteboardId}&files=${date}.png`
+
+            whiteboard.addImgToCanvasByUrl(url); //Add image to canvas
             console.log("Image uploaded!");
         },
         error: function (err) {
@@ -588,7 +592,7 @@ function saveWhiteboardToWebdav() {
     var date = (+new Date());
     $.ajax({
         type: 'POST',
-        url: document.URL.substr(0, document.URL.lastIndexOf('/')) + '/upload',
+        url: document.URL.substr(0, document.URL.lastIndexOf('/')) + '/save',
         data: {
             'imagedata': whiteboard.getImageDataBase64(),
             'imagejson': whiteboard.getImageDataJson(),

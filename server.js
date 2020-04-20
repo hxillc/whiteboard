@@ -6,6 +6,7 @@ var webdav = false; //Can be set to true if you want to allow webdav save (node 
 var fs = require("fs-extra");
 var fsp = require("fs-extra-promise");
 var express = require('express');
+// var bodyParser = require('body-parser');
 var formidable = require('formidable'); //form upload processing
 var PubNub = require('pubnub');
 
@@ -20,8 +21,11 @@ var s_whiteboard = require("./s_whiteboard.js");
 
 var app = express();
 app.use(express.static(__dirname + '/public'));
-var server = require('http').Server(app);
-server.listen(PORT);
+
+// accept large bodies
+// app.use(bodyParser.json({ parameterLimit: 5000000, limit: '5000kb' }));
+// app.use(bodyParser.urlencoded({ parameterLimit: 500000000, limit: '500000kb', extended: true }));
+
 
 var webdavaccess = {
   webdavserver: 'https://cloud.ruptive.cx/remote.php/dav/files/whiteboard/',
@@ -112,7 +116,7 @@ app.get('/loadwhiteboard', function (req, res) {
   var at = req["query"]["at"]
 
   if(accessToken === "" || accessToken == at) {
-    client.getFileContents(`${webdavaccess.webdavpath}${whiteboardId}.json`, { format: "text" })
+    client.getFileContents(`${webdavaccess.webdavpath}${whiteboardId}/${whiteboardId}.json`, { format: "text" })
     .then(data => {
       if(data) {
         data = JSON.parse(data)
@@ -123,9 +127,9 @@ app.get('/loadwhiteboard', function (req, res) {
       res.status(200).send(data)
     })
     .catch(err => {
-      console.log(err.response)
+      // console.log(err.response)
 
-      res.status(404).send(err)
+      res.status(200).send('no file')
     })
   }
   else {
@@ -133,94 +137,88 @@ app.get('/loadwhiteboard', function (req, res) {
   }
 })
 
-app.post('/upload', function (req, res) { //File upload
-    var form = new formidable.IncomingForm(); //Receive form
-    var formData = {
-        files: {},
-        fields: {}
-    }
-
-    form.on('file', function (name, file) {
-        formData["files"][file.name] = file;
-    });
-
-    form.on('field', function (name, value) {
-        formData["fields"][name] = value;
-    });
-
-    form.on('error', function (err) {
-        console.log('File uplaod Error!');
-    });
-
-    form.on('end', function () {
-        if (accessToken === "" || accessToken == formData["fields"]["at"]) {
-          progressUploadFormData(formData)
-          .then(() => {
-            res.send('done')
-          })
-          .catch(err => {
-            err == '403' ? res.sendStatus(403) : res.sendStatus(500)
-          })
-        } else {
-            res.status(401);  //Unauthorized
-            res.end();
-        }
-        //End file upload
-    });
-    form.parse(req);
+app.post('/save', function (req, res) { //File upload
+  return processFormData(req, res)
 });
+
+app.post('/upload', function (req, res) { //File upload
+  return processFormData(req, res)
+});
+
+function processFormData(req, res) {
+  var form = new formidable.IncomingForm(); //Receive form
+  var formData = {
+      files: {},
+      fields: {}
+  }
+  form.on('file', function (name, file) {
+      formData["files"][file.name] = file;
+  });
+  form.on('field', function (name, value) {
+      formData["fields"][name] = value;
+  });
+  form.on('error', function (err) {
+      console.log('File uplaod Error!');
+  });
+  form.on('end', function () {
+    if (accessToken === "" || accessToken == formData["fields"]["at"]) {
+      progressUploadFormData(formData)
+      .then(() => {
+        res.send('done')
+      })
+      .catch(err => {
+        err == '403' ? res.sendStatus(403) : res.sendStatus(500)
+      })
+    } else {
+        res.status(401);  //Unauthorized
+        res.end();
+    }
+    //End file upload
+  });
+  form.parse(req);
+}
 
 function progressUploadFormData(formData) {
   return new Promise((resolve, reject) => {
-    console.log("Progress new Form Data");
+    var whiteboardId = formData.fields["whiteboardId"];
     var fields = escapeAllContentStrings(formData.fields);
     var files = formData.files;
-    var whiteboardId = fields["whiteboardId"];
 
-    var name = fields["name"] || "";
     var date = fields["date"] || (+new Date());
-    var imagefile = `${whiteboardId}.png`;
+
+    var imagefile = `${fields["name"] || whiteboardId}.png`;
     var jsonfile  = `${whiteboardId}.json`;
 
-    fs.ensureDir("./public/uploads", function (err) {
-        if (err) {
-            console.log("Could not create upload folder!", err);
-            return;
+    var imagedata  = fields["imagedata"];
+    var imagejson  = fields["imagejson"];
+    var imagepath  = './public/uploads';
+    var remotePath = `${webdavaccess.webdavpath}${whiteboardId}`;
+
+    client.createDirectory(remotePath).finally(() => {
+      if(imagedata) {
+        // convert base64 to binary
+        imagedata = Buffer.from(imagedata.replace(/^data:image\/png;base64,/, "").replace(/^data:image\/jpeg;base64,/, ""), 'base64');
+
+        if(imagejson) {
+          Promise.all([
+            client.putFileContents(`${remotePath}/${imagefile}`, imagedata),
+            client.putFileContents(`${remotePath}/${jsonfile}`, JSON.stringify(imagejson, null, 2))
+          ])
+          .then(()   => resolve('files uploaded'))
+          .catch(err => reject(err))
         }
-        var imagedata = fields["imagedata"];
-        var imagejson = fields["imagejson"];
-        var imagepath = './public/uploads';
-
-        if ((imagedata && imagedata != "") && imagejson) { //Save from base64 data
-            imagedata = imagedata.replace(/^data:image\/png;base64,/, "").replace(/^data:image\/jpeg;base64,/, "");
-
-            Promise.all([
-              fsp.writeFile(`${imagepath}/${imagefile}`, imagedata, 'base64'),
-              fsp.writeFile(`${imagepath}/${jsonfile}`,  JSON.stringify(imagejson, null, 2))
-            ])
-            .then(() => {
-              if (webdavaccess) {
-                fs.createReadStream(`${imagepath}/${imagefile}`)
-                  .pipe(client.createWriteStream(`${webdavaccess.webdavpath}${imagefile}`));
-
-                fs.createReadStream(`${imagepath}/${jsonfile}`)
-                  .pipe(client.createWriteStream(`${webdavaccess.webdavpath}${jsonfile}`));
-
-                resolve()
-              }
-              else {
-                reject("Webdav is not enabled on the server!");
-              }
-            })
-            .catch(err => {
-              console.log("error", err);
-              reject(err);
-            })
-        } else {
-            reject("no imagedata!");
-            console.log("No image Data found for this upload!", name);
+        else {
+          client.putFileContents(`${remotePath}/${imagefile}`, imagedata)
+          .then((stuff) => {
+            console.log(stuff)
+            resolve('files uploaded')
+          })
         }
-    });
+      }
+      else {
+        reject("no imagedata!");
+      }
+    })
   })
 }
 
@@ -342,3 +340,7 @@ process.on('unhandledRejection', error => {
     // Will print "unhandledRejection err is not defined"
     console.log('unhandledRejection', error.message);
 })
+
+
+var server = require('http').Server(app);
+server.listen(PORT);

@@ -8,6 +8,9 @@ var fsp = require("fs-extra-promise");
 var express = require('express');
 var bodyParser = require('body-parser');
 var formidable = require('formidable'); //form upload processing
+var xss = require("xss");
+var ImageKit = require("imagekit");
+var request = require('request');
 
 const createDOMPurify = require('dompurify'); //Prevent xss
 const { JSDOM } = require('jsdom');
@@ -16,15 +19,12 @@ const DOMPurify = createDOMPurify(window);
 
 const { createClient } = require("webdav");
 
-var s_whiteboard = require("./s_whiteboard.js");
-
 var app = express();
 app.use(express.static(__dirname + '/public'));
 
 // accept large bodies
 // app.use(bodyParser.json({ parameterLimit: 5000000, limit: '5000kb' }));
 // app.use(bodyParser.urlencoded({ parameterLimit: 500000000, limit: '500000kb', extended: false }));
-
 
 var webdavaccess = {
   webdavserver: 'https://cloud.ruptive.cx/remote.php/dav/files/whiteboard/',
@@ -72,39 +72,23 @@ if (webdav) {
     // console.log("Webdav save is enabled!");
 }
 
-// app.get('/loadwhiteboard', function (req, res) {
-//     var wid = req["query"]["wid"];
-//     var at = req["query"]["at"]; //accesstoken
-//     if (accessToken === "" || accessToken == at) {
-//         var ret = s_whiteboard.loadStoredData(wid);
-//         res.send(ret);
-//         res.end();
-//     } else {
-//         res.status(401);  //Unauthorized
-//         res.end();
-//     }
-// });
-
 app.get('/loadwhiteboard', function (req, res) {
+  var remotePath = `${webdavaccess.webdavpath}${whiteboardId}`;
   var whiteboardId = req["query"]["wid"];
   var at = req["query"]["at"]
 
   if(accessToken === "" || accessToken == at) {
-    client.getFileContents(`${webdavaccess.webdavpath}${whiteboardId}/${whiteboardId}.json`, { format: "text" })
-    .then(data => {
-      if(data) {
-        data = JSON.parse(data)
+    request(`https://ik.imagekit.io/ruptive/whiteboards/${whiteboardId}/${whiteboardId}.txt`, (error, response, body) => {
+      if(body && body !== 'Not Found') {
+
+        res.status(200).send(JSON.parse(body))
       }
       else {
-        data = []
-      }
-      res.status(200).send(data)
-    })
-    .catch(err => {
-      // console.log(err.response)
+        console.log(error)
 
-      res.status(200).send('no file')
-    })
+        res.status(200).send('no file')
+      }
+    });
   }
   else {
     res.sendStatus(500)
@@ -137,8 +121,8 @@ function processFormData(req, res) {
   form.on('end', function () {
     if (accessToken === "" || accessToken == formData["fields"]["at"]) {
       progressUploadFormData(formData)
-      .then(() => {
-        res.send('done')
+      .then(data => {
+        res.send(data)
       })
       .catch(err => {
         err == '403' ? res.sendStatus(403) : res.sendStatus(500)
@@ -154,6 +138,12 @@ function processFormData(req, res) {
 
 function progressUploadFormData(formData) {
   return new Promise((resolve, reject) => {
+    var imagekit = new ImageKit({
+      publicKey:   "public_SFl3jDcVhbQORQSOwx8dHFFJsTU=",
+      privateKey:  "private_vwkG8Nbvaj4FyQaxH6RwUEdFtjw=",
+      urlEndpoint: "https://ik.imagekit.io/ruptive"
+    });
+
     var whiteboardId = formData.fields["whiteboardId"];
     var fields = escapeAllContentStrings(formData.fields);
     var files = formData.files;
@@ -161,38 +151,41 @@ function progressUploadFormData(formData) {
     var date = fields["date"] || (+new Date());
 
     var imagefile = `${fields["name"] || whiteboardId}.png`;
-    var jsonfile  = `${whiteboardId}.json`;
+    var textfile  = `${whiteboardId}.txt`;
 
     var imagedata  = fields["imagedata"];
     var imagejson  = fields["imagejson"];
-    var imagepath  = './public/uploads';
     var remotePath = `${webdavaccess.webdavpath}${whiteboardId}`;
 
-    client.createDirectory(remotePath).finally(() => {
-      if(imagedata) {
-        // convert base64 to binary
-        imagedata = Buffer.from(imagedata.replace(/^data:image\/png;base64,/, "").replace(/^data:image\/jpeg;base64,/, ""), 'base64');
-
-        if(imagejson) {
-          Promise.all([
-            client.putFileContents(`${remotePath}/${imagefile}`, imagedata),
-            client.putFileContents(`${remotePath}/${jsonfile}`, JSON.stringify(imagejson, null, 2))
-          ])
-          .then(()   => resolve('files uploaded'))
-          .catch(err => reject(err))
-        }
-        else {
-          client.putFileContents(`${remotePath}/${imagefile}`, imagedata)
-          .then((stuff) => {
-            console.log(stuff)
-            resolve('files uploaded')
-          })
-        }
+    if(imagedata) {
+      if(imagejson) {
+        Promise.all([
+          imagekit.upload({ file: Buffer.from(imagejson), folder: remotePath, fileName: textfile, useUniqueFileName: 'false' }),
+          imagekit.upload({ file: xss(imagedata), folder: remotePath, fileName: xss(imagefile), useUniqueFileName: 'false' })
+        ])
+        .then(resp => {
+          console.log(resp)
+          resolve('files uploaded')
+        })
+        .catch(err => {
+          console.log(err)
+          reject(err)
+        })
       }
       else {
-        reject("no imagedata!");
+        imagekit.upload({ file: xss(imagedata), folder: remotePath, fileName: xss(imagefile), useUniqueFileName: 'true' })
+        .then(resp => {
+          console.log(resp)
+          resolve(resp.url)
+        })
+        .catch(err => {
+          console.log(err)
+        })
       }
-    })
+    }
+    else {
+      reject("no imagedata!");
+    }
   })
 }
 

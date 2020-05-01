@@ -6,6 +6,7 @@ var accessToken = getQueryVariable("accesstoken");
 myUsername = myUsername || "unknown" + (Math.random() + "").substring(2, 6);
 accessToken = accessToken || "";
 var accessDenied = false;
+var sessionId = Math.random().toString(36).substr(2, 9);
 
 // Custom Html Title
 var title = getQueryVariable("title");
@@ -34,15 +35,19 @@ pubnub.subscribe({
 });
 
 pubnub.addListener({
-  message: function(message) {
-    handleMessageEvents(message);
+  message: function(data) {
+    if(data && data.message) {
+      if(data.message.sessionId !== sessionId) {
+        handleMessageEvents(data);
+      }
+    }
   }
 })
 
 function publish(payload) {
   pubnub.publish({
      channel: whiteboardId,
-     message: payload
+     message: { sessionId, ...payload }
    },
    (status, response) => {
      if(status.statusCode !== 200) {
@@ -574,11 +579,8 @@ function uploadImgAndAddToWhiteboard(base64data) {
             'name': date,
             'at': accessToken
         },
-        success: function (msg) {
-            var filename = whiteboardId + "_" + date + ".png";
-
-            let url = `https://cloud.ruptive.cx/index.php/s/8SPTq6ZAibw8E8g/download?path=%2F${whiteboardId}&files=${date}.png`
-
+        success: function (url) {
+          console.log(url)
             whiteboard.addImgToCanvasByUrl(url); //Add image to canvas
             console.log("Image uploaded!");
         },

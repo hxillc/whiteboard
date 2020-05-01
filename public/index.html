@@ -25,7 +25,6 @@
 	<link rel="stylesheet" href="./css/jquery-ui.min.css">
 	<link href="./css/main.css" rel="stylesheet">
 
-	<!--- Set width for Mobile Devices -!-->
 	<script>
 		//Set correct width height on mobile browsers
 		var isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
@@ -34,7 +33,14 @@
 		} else {
 			$('head').append('<meta name="viewport" content="width=1400" />');
 		}
-	</script>
+
+    // Registering our Service worker
+    if('serviceWorker' in navigator) {
+			window.addEventListener('load', function() {
+		    navigator.serviceWorker.register('./js/service-worker.js');
+		  });
+    }
+  </script>
 </head>
 
 <body>

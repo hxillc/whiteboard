@@ -6,7 +6,13 @@ var accessToken = getQueryVariable("accesstoken");
 myUsername = myUsername || "unknown" + (Math.random() + "").substring(2, 6);
 accessToken = accessToken || "";
 var accessDenied = false;
-var sessionId = Math.random().toString(36).substr(2, 9);
+var sessionId = getQueryVariable("uuid")
+var participants = []
+var master = false
+// var master = function() {
+//   return sessionId == '1234567890'
+// }
+var whiteboardLoaded = false
 
 // Custom Html Title
 var title = getQueryVariable("title");
@@ -25,22 +31,29 @@ for (var i = 3; i < urlSplit.length; i++) {
 pubnub = new PubNub({
   publishKey: 'pub-c-1be4bf40-5cf0-4daa-995c-592ef7e5b160',
   subscribeKey: 'sub-c-e10759f2-730c-11ea-bbea-a6250b4fd944',
-  uuid: "74a4a45c-7bee-4fbc-b197-d74dfa11b7f8",
+  uuid: sessionId,
   // ssl: true
 })
 
 pubnub.subscribe({
   channels: [whiteboardId],
-  withPresence: false,
+  withPresence: true,
 });
 
 pubnub.addListener({
   message: function(data) {
     if(data && data.message) {
-      if(data.message.sessionId !== sessionId) {
+      // console.log(data.message)
+      if(data.message.joinWhiteboard) {
+        hereNow()
+      }
+      else if(data.message.sessionId !== sessionId) {
         handleMessageEvents(data);
       }
     }
+  },
+  status: function(data) {
+    // console.log(data)
   }
 })
 
@@ -56,6 +69,29 @@ function publish(payload) {
    });
 }
 
+function hereNow() {
+  setTimeout(function() {
+    pubnub.hereNow({
+      channels: [whiteboardId],
+      includeUUIDs: true,
+      includeState: false
+    },
+    (status, response) => {
+      console.log('status', status, 'response', response)
+
+      if(response.totalOccupancy < 2) {
+        master = true
+      }
+
+      if(master && whiteboardLoaded) {
+        saveWhiteboardToWebdav()
+      }
+
+      // loadWhiteboardFromServer()
+    });
+  }, 0)
+}
+
 function handleMessageEvents(obj) {
     if (!obj || !obj.message) return;
     obj = obj.message
@@ -66,6 +102,18 @@ function handleMessageEvents(obj) {
       data = obj[action];
 
       switch(action) {
+        case 'loadWhiteboard':
+        console.log(data)
+
+        loadWhiteboardFromServer(data)
+
+        // if(!whiteboardLoaded && !master()) {
+        //   console.log('hey',data)
+        //
+        //   loadWhiteboardFromServer(data)
+        // }
+        break;
+
         case 'drawToWhiteboard':
         whiteboard.handleEventsAndData(data, true);
         break;
@@ -88,11 +136,16 @@ function handleMessageEvents(obj) {
     })
   };
 
+  function loadWhiteboardFromServer(name) {
+    // request whiteboard from server
+    $.get(subdir + "/loadwhiteboard", { wid: whiteboardId, at: accessToken, name: name, master: master }).done(function (data) {
+        whiteboard.loadData(data)
+    });
+
+    whiteboardLoaded = true
+  }
+
 $(document).ready(function () {
-  // DELETE THIS
-    // if (getQueryVariable("webdav") == "true") {
-    //     $("#uploadWebDavBtn").show();
-    // }
 
     publish({
       "joinWhiteboard": { wid: whiteboardId, at: accessToken, windowWidthHeight: { w: $(window).width(), h: $(window).height() }}
@@ -109,10 +162,7 @@ $(document).ready(function () {
         }
     });
 
-    // request whiteboard from server
-    $.get(subdir + "/loadwhiteboard", { wid: whiteboardId, at: accessToken }).done(function (data) {
-        whiteboard.loadData(data)
-    });
+    loadWhiteboardFromServer()
 
     $(window).resize(function () {
         publish({
@@ -349,81 +399,6 @@ $(document).ready(function () {
         }, 0);
     });
 
-    // DELETE THIS
-    // $("#uploadWebDavBtn").click(function () {
-    //     if ($(".webdavUploadBtn").length > 0) {
-    //         return;
-    //     }
-    //
-    //     var webdavserver = localStorage.getItem('webdavserver') || ""
-    //     var webdavpath = localStorage.getItem('webdavpath') || "/"
-    //     var webdavusername = localStorage.getItem('webdavusername') || ""
-    //     var webdavpassword = localStorage.getItem('webdavpassword') || ""
-    //     var webDavHtml = $('<div>' +
-    //         '<table>' +
-    //         '<tr>' +
-    //         '<td>Server URL:</td>' +
-    //         '<td><input class="webdavserver" type="text" value="' + webdavserver + '" placeholder="https://yourserver.com/remote.php/webdav/"></td>' +
-    //         '<td></td>' +
-    //         '</tr>' +
-    //         '<tr>' +
-    //         '<td>Path:</td>' +
-    //         '<td><input class="webdavpath" type="text" placeholder="folder" value="' + webdavpath + '"></td>' +
-    //         '<td style="font-size: 0.7em;"><i>path always have to start & end with "/"</i></td>' +
-    //         '</tr>' +
-    //         '<tr>' +
-    //         '<td>Username:</td>' +
-    //         '<td><input class="webdavusername" type="text" value="' + webdavusername + '" placeholder="username"></td>' +
-    //         '<td style="font-size: 0.7em;"></td>' +
-    //         '</tr>' +
-    //         '<tr>' +
-    //         '<td>Password:</td>' +
-    //         '<td><input class="webdavpassword" type="password" value="' + webdavpassword + '" placeholder="password"></td>' +
-    //         '<td style="font-size: 0.7em;"></td>' +
-    //         '</tr>' +
-    //         '<tr>' +
-    //         '<td style="font-size: 0.7em;" colspan="3">Note: You have to generate and use app credentials if you have 2 Factor Auth activated on your dav/nextcloud server!</td>' +
-    //         '</tr>' +
-    //         '<tr>' +
-    //         '<td></td>' +
-    //         '<td colspan="2"><span class="loadingWebdavText" style="display:none;">Saving to webdav, please wait...</span><button class="modalBtn webdavUploadBtn"><i class="fas fa-upload"></i> Start Upload</button></td>' +
-    //         '</tr>' +
-    //         '</table>' +
-    //         '</div>');
-    //     webDavHtml.find(".webdavUploadBtn").click(function () {
-    //         var webdavserver = webDavHtml.find(".webdavserver").val();
-    //         localStorage.setItem('webdavserver', webdavserver);
-    //         var webdavpath = webDavHtml.find(".webdavpath").val();
-    //         localStorage.setItem('webdavpath', webdavpath);
-    //         var webdavusername = webDavHtml.find(".webdavusername").val();
-    //         localStorage.setItem('webdavusername', webdavusername);
-    //         var webdavpassword = webDavHtml.find(".webdavpassword").val();
-    //         localStorage.setItem('webdavpassword', webdavpassword);
-    //         var base64data = whiteboard.getImageDataBase64();
-    //         var webdavaccess = {
-    //             webdavserver: webdavserver,
-    //             webdavpath: webdavpath,
-    //             webdavusername: webdavusername,
-    //             webdavpassword: webdavpassword
-    //         }
-    //         webDavHtml.find(".loadingWebdavText").show();
-    //         webDavHtml.find(".webdavUploadBtn").hide();
-    //         saveWhiteboardToWebdav(base64data, webdavaccess, function (err) {
-    //             if (err) {
-    //                 webDavHtml.find(".loadingWebdavText").hide();
-    //                 webDavHtml.find(".webdavUploadBtn").show();
-    //             } else {
-    //                 webDavHtml.parents(".basicalert").remove();
-    //             }
-    //         });
-    //     })
-    //     showBasicAlert(webDavHtml, {
-    //         header: "Save to Webdav",
-    //         okBtnText: "cancel",
-    //         headercolor: "#0082c9"
-    //     })
-    // });
-
     // upload json containing steps
     $("#uploadJsonBtn").click(function () {
         $("#myFile").click();
@@ -591,6 +566,7 @@ function uploadImgAndAddToWhiteboard(base64data) {
 }
 
 function saveWhiteboardToWebdav() {
+    console.log('saveWhiteboardToWebdav')
     var date = (+new Date());
     $.ajax({
         type: 'POST',
@@ -602,8 +578,11 @@ function saveWhiteboardToWebdav() {
             'date': date,
             'at': accessToken
         },
-        success: function (msg) {
-          console.log('saved')
+        success: function (data) {
+          publish({
+            'loadWhiteboard': data
+          })
+
             // showBasicAlert("Whiteboard Saved!", {
             //     headercolor: "#5c9e5c"
             // });

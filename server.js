@@ -26,6 +26,12 @@ app.use(express.static(__dirname + '/public'));
 // app.use(bodyParser.json({ parameterLimit: 5000000, limit: '5000kb' }));
 // app.use(bodyParser.urlencoded({ parameterLimit: 500000000, limit: '500000kb', extended: false }));
 
+var imagekit = new ImageKit({
+  publicKey:   "public_SFl3jDcVhbQORQSOwx8dHFFJsTU=",
+  privateKey:  "private_vwkG8Nbvaj4FyQaxH6RwUEdFtjw=",
+  urlEndpoint: "https://ik.imagekit.io/ruptive"
+});
+
 var webdavaccess = {
   webdavserver: 'https://cloud.ruptive.cx/remote.php/dav/files/whiteboard/',
   webdavpath: '/whiteboards/',
@@ -33,22 +39,11 @@ var webdavaccess = {
   webdavpassword: 'whiteboard'
 }
 
-var client = createClient(
-  webdavaccess.webdavserver,
-  {
-    username: webdavaccess.webdavusername,
-    password: webdavaccess.webdavpassword
-  }
-)
-
 if (process.env.accesstoken) {
     accessToken = process.env.accesstoken;
 }
 if (process.env.disablesmallestscreen) {
     disablesmallestscreen = true;
-}
-if (process.env.webdav) {
-    webdav = true;
 }
 
 var startArgs = getArgs();
@@ -57,9 +52,6 @@ if (startArgs["accesstoken"]) {
 }
 if (startArgs["disablesmallestscreen"]) {
     disableSmallestScreen = true;
-}
-if (startArgs["webdav"]) {
-    webdav = true;
 }
 
 if (accessToken !== "") {
@@ -72,13 +64,27 @@ if (webdav) {
     // console.log("Webdav save is enabled!");
 }
 
+// app.get('/versions', function(req, res) {
+//   var whiteboardId = req["query"]["wid"];
+//
+//   imagekit.listFiles({
+//     path : "products"
+//   },
+//   (error, result) => {
+//     if(error) console.log(error);
+//     else console.log(result);
+//   });
+// })
+
 app.get('/loadwhiteboard', function (req, res) {
   var remotePath = `${webdavaccess.webdavpath}${whiteboardId}`;
+  var master = req["query"]["master"];
   var whiteboardId = req["query"]["wid"];
+  var whiteboardName = req["query"]["name"];
   var at = req["query"]["at"]
 
-  if(accessToken === "" || accessToken == at) {
-    request(`https://ik.imagekit.io/ruptive/whiteboards/${whiteboardId}/${whiteboardId}.txt`, (error, response, body) => {
+  const getImageData = (url) => {
+    request(url, (error, response, body) => {
       if(body && body !== 'Not Found') {
 
         res.status(200).send(JSON.parse(body))
@@ -89,6 +95,28 @@ app.get('/loadwhiteboard', function (req, res) {
         res.status(200).send('no file')
       }
     });
+  }
+
+  if(accessToken === "" || accessToken == at) {
+    if(master == 'true') {
+      imagekit.listFiles({
+        path: `whiteboards/${whiteboardId}`
+      },
+      (error, result) => {
+        if(error) console.log(error);
+
+        else {
+          let latest = result
+          .filter(r => r.name.includes('.txt'))
+          .sort((a, b) => (a.name < b.name) ? 1 : -1)
+
+          getImageData(latest[0].url)
+        }
+      });
+    }
+    else {
+      getImageData(`https://ik.imagekit.io/ruptive/whiteboards/${whiteboardId}/${whiteboardName}`)
+    }
   }
   else {
     res.sendStatus(500)
@@ -102,6 +130,53 @@ app.post('/save', function (req, res) { //File upload
 app.post('/upload', function (req, res) { //File upload
   return processFormData(req, res)
 });
+
+const progressUploadFormData = (formData) => {
+  return new Promise((resolve, reject) => {
+    var whiteboardId = formData.fields["whiteboardId"];
+    var fields = escapeAllContentStrings(formData.fields);
+    var files = formData.files;
+
+    var date = fields["date"] || (+new Date());
+
+    var imagefile = `${fields["name"] || whiteboardId}_${date}.png`;
+    var textfile  = `${whiteboardId}_${date}.txt`;
+
+    var imagedata  = fields["imagedata"];
+    var imagejson  = fields["imagejson"];
+    var remotePath = `${webdavaccess.webdavpath}${whiteboardId}`;
+
+    if(imagedata) {
+      if(imagejson) {
+        Promise.all([
+          imagekit.upload({ file: Buffer.from(imagejson), folder: remotePath, fileName: textfile, useUniqueFileName: 'false' }),
+          // imagekit.upload({ file: xss(imagedata), folder: remotePath, fileName: xss(imagefile), useUniqueFileName: 'false' })
+        ])
+        .then(resp => {
+          console.log(resp)
+          resolve(resp[0].name)
+        })
+        .catch(err => {
+          console.log(err)
+          reject(err)
+        })
+      }
+      else {
+        imagekit.upload({ file: xss(imagedata), folder: remotePath, fileName: xss(imagefile), useUniqueFileName: 'true' })
+        .then(resp => {
+          console.log(resp)
+          resolve(resp.url)
+        })
+        .catch(err => {
+          console.log(err)
+        })
+      }
+    }
+    else {
+      reject("no imagedata!");
+    }
+  })
+}
 
 function processFormData(req, res) {
   var form = new formidable.IncomingForm(); //Receive form
@@ -134,59 +209,6 @@ function processFormData(req, res) {
     //End file upload
   });
   form.parse(req);
-}
-
-function progressUploadFormData(formData) {
-  return new Promise((resolve, reject) => {
-    var imagekit = new ImageKit({
-      publicKey:   "public_SFl3jDcVhbQORQSOwx8dHFFJsTU=",
-      privateKey:  "private_vwkG8Nbvaj4FyQaxH6RwUEdFtjw=",
-      urlEndpoint: "https://ik.imagekit.io/ruptive"
-    });
-
-    var whiteboardId = formData.fields["whiteboardId"];
-    var fields = escapeAllContentStrings(formData.fields);
-    var files = formData.files;
-
-    var date = fields["date"] || (+new Date());
-
-    var imagefile = `${fields["name"] || whiteboardId}.png`;
-    var textfile  = `${whiteboardId}.txt`;
-
-    var imagedata  = fields["imagedata"];
-    var imagejson  = fields["imagejson"];
-    var remotePath = `${webdavaccess.webdavpath}${whiteboardId}`;
-
-    if(imagedata) {
-      if(imagejson) {
-        Promise.all([
-          imagekit.upload({ file: Buffer.from(imagejson), folder: remotePath, fileName: textfile, useUniqueFileName: 'false' }),
-          imagekit.upload({ file: xss(imagedata), folder: remotePath, fileName: xss(imagefile), useUniqueFileName: 'false' })
-        ])
-        .then(resp => {
-          console.log(resp)
-          resolve('files uploaded')
-        })
-        .catch(err => {
-          console.log(err)
-          reject(err)
-        })
-      }
-      else {
-        imagekit.upload({ file: xss(imagedata), folder: remotePath, fileName: xss(imagefile), useUniqueFileName: 'true' })
-        .then(resp => {
-          console.log(resp)
-          resolve(resp.url)
-        })
-        .catch(err => {
-          console.log(err)
-        })
-      }
-    }
-    else {
-      reject("no imagedata!");
-    }
-  })
 }
 
 

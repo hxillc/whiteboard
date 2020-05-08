@@ -6,7 +6,8 @@ var accessToken = getQueryVariable("accesstoken");
 myUsername = myUsername || "unknown" + (Math.random() + "").substring(2, 6);
 accessToken = accessToken || "";
 var accessDenied = false;
-var sessionId = getQueryVariable("uuid")
+var userId = getQueryVariable("uuid")
+var sessionId = `${userId}_${Math.random().toString(36).substr(2, 9)}`
 var participants = []
 var master = false
 // var master = function() {
@@ -31,7 +32,7 @@ for (var i = 3; i < urlSplit.length; i++) {
 pubnub = new PubNub({
   publishKey: 'pub-c-1be4bf40-5cf0-4daa-995c-592ef7e5b160',
   subscribeKey: 'sub-c-e10759f2-730c-11ea-bbea-a6250b4fd944',
-  uuid: sessionId,
+  uuid: userId,
   // ssl: true
 })
 

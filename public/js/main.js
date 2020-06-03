@@ -30,8 +30,8 @@ for (var i = 3; i < urlSplit.length; i++) {
 }
 
 pubnub = new PubNub({
-  publishKey: 'pub-c-1be4bf40-5cf0-4daa-995c-592ef7e5b160',
-  subscribeKey: 'sub-c-e10759f2-730c-11ea-bbea-a6250b4fd944',
+  publishKey: 'pub-c-9dbac120-e39e-462a-bd87-744daaa9b425',
+  subscribeKey: 'sub-c-0b1ec154-a4f8-11ea-9fed-9e0ebcfde865',
   uuid: userId,
   // ssl: true
 })

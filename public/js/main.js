@@ -80,6 +80,8 @@ function hereNow() {
     (status, response) => {
       console.log('status', status, 'response', response)
 
+      console.log(response.totalOccupancy)
+
       if(response.totalOccupancy < 2) {
         master = true
       }
@@ -88,7 +90,7 @@ function hereNow() {
         saveWhiteboardToWebdav()
       }
 
-      // loadWhiteboardFromServer()
+      loadWhiteboardFromServer()
     });
   }, 0)
 }
@@ -104,7 +106,7 @@ function handleMessageEvents(obj) {
 
       switch(action) {
         case 'loadWhiteboard':
-        console.log(data)
+        console.log('heyyy',data)
 
         loadWhiteboardFromServer(data)
 
@@ -138,8 +140,11 @@ function handleMessageEvents(obj) {
   };
 
   function loadWhiteboardFromServer(name) {
+    console.log(master, 'master')
     // request whiteboard from server
     $.get(subdir + "/loadwhiteboard", { wid: whiteboardId, at: accessToken, name: name, master: master }).done(function (data) {
+
+        console.log('whiteboard data', data)
         whiteboard.loadData(data)
     });
 
@@ -162,8 +167,6 @@ $(document).ready(function () {
             })
         }
     });
-
-    loadWhiteboardFromServer()
 
     $(window).resize(function () {
         publish({
@@ -567,7 +570,6 @@ function uploadImgAndAddToWhiteboard(base64data) {
 }
 
 function saveWhiteboardToWebdav() {
-    console.log('saveWhiteboardToWebdav')
     var date = (+new Date());
     $.ajax({
         type: 'POST',

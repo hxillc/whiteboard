@@ -153,7 +153,7 @@ const progressUploadFormData = (formData) => {
           // imagekit.upload({ file: xss(imagedata), folder: remotePath, fileName: xss(imagefile), useUniqueFileName: 'false' })
         ])
         .then(resp => {
-          console.log(resp)
+          // console.log(resp)
           resolve(resp[0].name)
         })
         .catch(err => {

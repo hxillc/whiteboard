@@ -106,7 +106,6 @@ function handleMessageEvents(obj) {
 
       switch(action) {
         case 'loadWhiteboard':
-        console.log('heyyy',data)
 
         loadWhiteboardFromServer(data)
 

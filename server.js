@@ -110,7 +110,12 @@ app.get('/loadwhiteboard', function (req, res) {
           .filter(r => r.name.includes('.txt'))
           .sort((a, b) => (a.name < b.name) ? 1 : -1)
 
-          getImageData(latest[0].url)
+          if(latest[0] && latest[0].url) {
+            getImageData(latest[0].url)
+          }
+          else {
+            res.status(200).send('no file')
+          }
         }
       });
     }

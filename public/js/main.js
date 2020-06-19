@@ -6,14 +6,12 @@ var accessToken = getQueryVariable("accesstoken");
 myUsername = myUsername || "unknown" + (Math.random() + "").substring(2, 6);
 accessToken = accessToken || "";
 var accessDenied = false;
-var userId = getQueryVariable("uuid")
-var sessionId = `${userId}_${Math.random().toString(36).substr(2, 9)}`
-var participants = []
-var master = false
-// var master = function() {
-//   return sessionId == '1234567890'
-// }
-var whiteboardLoaded = false
+var userId = getQueryVariable("uuid");
+var sessionId = `${userId}_${Math.random().toString(36).substr(2, 9)}`;
+var participants = [];
+var master = false;
+
+var whiteboardLoaded = false;
 
 // Custom Html Title
 var title = getQueryVariable("title");
@@ -46,7 +44,7 @@ pubnub.addListener({
     if(data && data.message) {
       // console.log(data.message)
       if(data.message.joinWhiteboard) {
-        hereNow()
+        hereNow(data.message.joinWhiteboard.userId)
       }
       else if(data.message.sessionId !== sessionId) {
         handleMessageEvents(data);
@@ -70,29 +68,19 @@ function publish(payload) {
    });
 }
 
-function hereNow() {
-  setTimeout(function() {
-    pubnub.hereNow({
-      channels: [whiteboardId],
-      includeUUIDs: true,
-      includeState: false
-    },
-    (status, response) => {
-      console.log('status', status, 'response', response)
-
-      console.log(response.totalOccupancy)
-
-      if(response.totalOccupancy < 2) {
-        master = true
-      }
-
-      if(master && whiteboardLoaded) {
-        saveWhiteboardToWebdav()
-      }
-
+function hereNow(joinedUser) {
+  if(!master) {
+    master = joinedUser
+  }
+  // inital load for joing master, and save for master when others join
+  if(master === userId) {
+    if(whiteboardLoaded) {
+      saveWhiteboardToWebdav()
+    }
+    else {
       loadWhiteboardFromServer()
-    });
-  }, 0)
+    }
+  }
 }
 
 function handleMessageEvents(obj) {
@@ -107,13 +95,7 @@ function handleMessageEvents(obj) {
       switch(action) {
         case 'loadWhiteboard':
 
-        loadWhiteboardFromServer(data)
-
-        // if(!whiteboardLoaded && !master()) {
-        //   console.log('hey',data)
-        //
-        //   loadWhiteboardFromServer(data)
-        // }
+        if(master !== userId) loadWhiteboardFromServer()
         break;
 
         case 'drawToWhiteboard':
@@ -138,22 +120,21 @@ function handleMessageEvents(obj) {
     })
   };
 
-  function loadWhiteboardFromServer(name) {
-    console.log(master, 'master')
+  function loadWhiteboardFromServer() {
     // request whiteboard from server
-    $.get(subdir + "/loadwhiteboard", { wid: whiteboardId, at: accessToken, name: name, master: master }).done(function (data) {
+    $.get(subdir + "/loadwhiteboard", { wid: whiteboardId, at: accessToken, master: master }).done(function (data) {
 
-        console.log('whiteboard data', data)
+        // console.log('whiteboard data', data)
         whiteboard.loadData(data)
     });
 
-    whiteboardLoaded = true
+    whiteboardLoaded = true;
   }
 
 $(document).ready(function () {
 
     publish({
-      "joinWhiteboard": { wid: whiteboardId, at: accessToken, windowWidthHeight: { w: $(window).width(), h: $(window).height() }}
+      "joinWhiteboard": { wid: whiteboardId, userId: userId, at: accessToken, windowWidthHeight: { w: $(window).width(), h: $(window).height() }}
     })
 
     whiteboard.loadWhiteboard("#whiteboardContainer", { //Load the whiteboard
@@ -569,35 +550,39 @@ function uploadImgAndAddToWhiteboard(base64data) {
 }
 
 function saveWhiteboardToWebdav() {
-    var date = (+new Date());
+    let json = whiteboard.getImageDataJson();
+
+    if(json && json.length > 0) {
+      let date = (+new Date());
+
     $.ajax({
         type: 'POST',
         url: document.URL.substr(0, document.URL.lastIndexOf('/')) + '/save',
         data: {
-            'imagedata': whiteboard.getImageDataBase64(),
-            'imagejson': whiteboard.getImageDataJson(),
-            'whiteboardId': whiteboardId,
-            'date': date,
-            'at': accessToken
+          'imagedata': whiteboard.getImageDataBase64(),
+          'imagejson': json,
+          'whiteboardId': whiteboardId,
+          'date': date,
+          'at': accessToken
         },
         success: function (data) {
           publish({
             'loadWhiteboard': data
           })
-
-            // showBasicAlert("Whiteboard Saved!", {
-            //     headercolor: "#5c9e5c"
-            // });
+          // showBasicAlert("Whiteboard Saved!", {
+          //     headercolor: "#5c9e5c"
+          // });
         },
         error: function (err) {
           console.log('error saving')
-            // if (err.status == 403) {
-            //     showBasicAlert("Could not connect to Webdav folder! Please check the credentials and paths and try again!");
-            // } else {
-            //     showBasicAlert("Unknown Webdav error! ", err);
-            // }
+          // if (err.status == 403) {
+          //     showBasicAlert("Could not connect to Webdav folder! Please check the credentials and paths and try again!");
+          // } else {
+          //     showBasicAlert("Unknown Webdav error! ", err);
+          // }
         }
     });
+  }
 }
 
 // verify if filename refers to an image

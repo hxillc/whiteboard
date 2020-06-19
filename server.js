@@ -98,7 +98,10 @@ app.get('/loadwhiteboard', function (req, res) {
   }
 
   if(accessToken === "" || accessToken == at) {
-    if(master == 'true') {
+    if(whiteboardName) {
+      getImageData(`https://ik.imagekit.io/ruptive/whiteboards/${whiteboardId}/${whiteboardName}`)
+    }
+    else {
       imagekit.listFiles({
         path: `whiteboards/${whiteboardId}`
       },
@@ -119,26 +122,24 @@ app.get('/loadwhiteboard', function (req, res) {
         }
       });
     }
-    else {
-      getImageData(`https://ik.imagekit.io/ruptive/whiteboards/${whiteboardId}/${whiteboardName}`)
-    }
   }
   else {
     res.sendStatus(500)
   }
 })
 
-app.post('/save', function (req, res) { //File upload
+app.post('/save', function (req, res) {
   return processFormData(req, res)
 });
 
-app.post('/upload', function (req, res) { //File upload
+app.post('/upload', function (req, res) {
   return processFormData(req, res)
 });
 
 const progressUploadFormData = (formData) => {
   return new Promise((resolve, reject) => {
     var whiteboardId = formData.fields["whiteboardId"];
+    // var fields = formData.fields;
     var fields = escapeAllContentStrings(formData.fields);
     var files = formData.files;
 

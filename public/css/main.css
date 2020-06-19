@@ -6,6 +6,15 @@ body {
     overflow: hidden;
 }
 
+#whiteboardLoader {
+  position: absolute;
+  top: 20%;
+  height: 100px;
+  width: 100%;
+  text-align: center;
+  z-index: 100;
+}
+
 #whiteboardContainer {
     height: calc(var(--vh, 1vh) * 100);
     width: 100%;

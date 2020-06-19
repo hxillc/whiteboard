@@ -839,6 +839,10 @@ var whiteboard = {
                 } else {
                     _this.handleEventsAndData(content[i], isNewData);
                     callAfterEveryStep(content[i], i);
+
+                    setTimeout(function(){
+                      document.getElementById('whiteboardLoader').style.display = 'none';
+                    }, 1000)
                 }
             }
         }

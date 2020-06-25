@@ -11,8 +11,6 @@ var sessionId = `${userId}_${Math.random().toString(36).substr(2, 9)}`;
 var participants = [];
 var master = false;
 
-var whiteboardLoaded = false;
-
 // Custom Html Title
 var title = getQueryVariable("title");
 if(!title === false){
@@ -31,12 +29,12 @@ pubnub = new PubNub({
   publishKey: 'pub-c-9dbac120-e39e-462a-bd87-744daaa9b425',
   subscribeKey: 'sub-c-0b1ec154-a4f8-11ea-9fed-9e0ebcfde865',
   uuid: userId,
-  // ssl: true
+  ssl: true
 })
 
 pubnub.subscribe({
-  channels: [whiteboardId],
-  withPresence: true,
+  channels: [whiteboardId, `${whiteboardId}-drawings`],
+  withPresence: false,
 });
 
 pubnub.addListener({
@@ -44,7 +42,7 @@ pubnub.addListener({
     if(data && data.message) {
       // console.log(data.message)
       if(data.message.joinWhiteboard) {
-        hereNow(data.message.joinWhiteboard.userId)
+        `${data.message.joinWhiteboard.userId} has joined`
       }
       else if(data.message.sessionId !== sessionId) {
         handleMessageEvents(data);
@@ -56,31 +54,50 @@ pubnub.addListener({
   }
 })
 
-function publish(payload) {
-  pubnub.publish({
-     channel: whiteboardId,
-     message: { sessionId, ...payload }
-   },
-   (status, response) => {
-     if(status.statusCode !== 200) {
-       console.error('error publishing whiteboard events')
-     }
-   });
+function loadWhiteboardHistory(timetoken) {
+  pubnub.history({
+    channel: `${whiteboardId}-drawings`,
+    count: 100,
+    reverse: true,
+    start: timetoken,
+    stringifiedTimeToken: true
+  },
+  function (status, response) {
+    if(response && response.messages) {
+
+      let history = response.messages.map(m => m.entry.drawToWhiteboard)
+
+      whiteboard.loadData(history)
+
+      // if payload was an even 100, check for more messages
+      if(false || response.messages.length == 100) {
+        loadWhiteboardHistory(response.endTimeToken)
+      }
+      else {
+        setTimeout(function(){
+          let el = document.getElementById('whiteboardLoader')
+
+          if(el) el.style.display = 'none';
+        }, 100)
+      }
+    }
+  });
 }
 
-function hereNow(joinedUser) {
-  if(!master) {
-    master = joinedUser
-  }
-  // inital load for joing master, and save for master when others join
-  if(master === userId) {
-    if(whiteboardLoaded) {
-      saveWhiteboardToWebdav()
+// load whiteboard history
+loadWhiteboardHistory('946702800000000')
+
+function publish(payload, isDrawing = false) {
+
+  pubnub.publish({
+    channel: isDrawing ? `${whiteboardId}-drawings` : whiteboardId,
+    message: { sessionId, ...payload }
+  },
+  (status, response) => {
+    if(status.statusCode !== 200) {
+      console.error('error publishing whiteboard events')
     }
-    else {
-      loadWhiteboardFromServer()
-    }
-  }
+  });
 }
 
 function handleMessageEvents(obj) {
@@ -127,8 +144,6 @@ function handleMessageEvents(obj) {
         // console.log('whiteboard data', data)
         whiteboard.loadData(data)
     });
-
-    whiteboardLoaded = true;
   }
 
 $(document).ready(function () {
@@ -142,9 +157,12 @@ $(document).ready(function () {
         username: btoa(myUsername),
         sendFunction: function (content) {
             content["at"] = accessToken;
+
+            let isDrawing = content['t'] !== 'cursor';
+
             publish({
               "drawToWhiteboard": content
-            })
+            }, isDrawing)
         }
     });
 
@@ -527,6 +545,9 @@ window.addEventListener("drop", function (e) {
 }, false);
 
 function uploadImgAndAddToWhiteboard(base64data) {
+    let loader = document.getElementById('imageUploadLoader')
+    if(loader) loader.style.display = 'block';
+
     var date = Date.now();
     $.ajax({
         type: 'POST',
@@ -541,7 +562,10 @@ function uploadImgAndAddToWhiteboard(base64data) {
         success: function (url) {
           console.log(url)
             whiteboard.addImgToCanvasByUrl(url); //Add image to canvas
-            console.log("Image uploaded!");
+
+            setTimeout(function(){
+              if(loader) loader.style.display = 'none';
+            }, 1000)
         },
         error: function (err) {
             showBasicAlert("Failed to upload frame: " + JSON.stringify(err));
@@ -566,9 +590,9 @@ function saveWhiteboardToWebdav() {
           'at': accessToken
         },
         success: function (data) {
-          publish({
-            'loadWhiteboard': data
-          })
+          // publish({
+          //   'loadWhiteboard': data
+          // })
           // showBasicAlert("Whiteboard Saved!", {
           //     headercolor: "#5c9e5c"
           // });

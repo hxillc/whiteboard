@@ -44,9 +44,18 @@
 </head>
 
 <body>
-	<div id="whiteboardLoader">
-		<i class="fas fa-circle-notch fa-spin fa-3x fa-fw"></i>
-		<p>Loading Whiteboard</p>
+	<div id="whiteboardLoader" class="loader-overlay">
+		<div class="loader">
+			<i class="fas fa-circle-notch fa-spin fa-3x fa-fw"></i>
+			<p>Loading Whiteboard...</p>
+		</div>
+	</div>
+
+	<div id="imageUploadLoader" class="loader-overlay">
+		<div class="loader">
+			<i class="fas fa-circle-notch fa-spin fa-3x fa-fw"></i>
+			<p>Uploading Image...</p>
+		</div>
 	</div>
 
 	<!---Whiteboard container -!-->
@@ -121,7 +130,7 @@
 			<button id="saveAsImageBtn" title="Download Whiteboard Image" type="button" class="whiteboardBtn">
 				<i class="fas fa-download"></i>
 			</button>
-			<button style="position: relative;" id="saveWhiteboardBtn" title="Save Whiteboard" type="button"
+			<button style="position: relative;" id="saveWhiteboardBtn" title="Save Whiteboard Version" type="button"
 				class="whiteboardBtn">
 				<i class="far fa-save"></i>
 			</button>

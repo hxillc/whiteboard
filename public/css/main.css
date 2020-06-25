@@ -6,13 +6,28 @@ body {
     overflow: hidden;
 }
 
-#whiteboardLoader {
+.loader-overlay {
   position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 99;
+  background: rgba(255, 255, 255, 0.7);
+  display: none;
+}
+
+.loader-overlay .loader {
+  position: relative;
   top: 20%;
   height: 100px;
   width: 100%;
   text-align: center;
   z-index: 100;
+}
+
+#whiteboardLoader.loader-overlay {
+  display: block;
 }
 
 #whiteboardContainer {
